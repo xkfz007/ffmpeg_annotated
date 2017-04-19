@@ -670,7 +670,7 @@ static int parse_playlist(HLSContext *c, const char *url,
         av_dict_set(&opts, "seekable", "0", 0);
 
         // broker prior HTTP options that should be consistent across requests
-        av_dict_set(&opts, "user-agent", c->user_agent, 0);
+        av_dict_set(&opts, "user_agent", c->user_agent, 0);
         av_dict_set(&opts, "cookies", c->cookies, 0);
         av_dict_set(&opts, "headers", c->headers, 0);
         av_dict_set(&opts, "http_proxy", c->http_proxy, 0);
@@ -1084,7 +1084,7 @@ static int open_input(HLSContext *c, struct playlist *pls, struct segment *seg)
     int is_http = 0;
 
     // broker prior HTTP options that should be consistent across requests
-    av_dict_set(&opts, "user-agent", c->user_agent, 0);
+    av_dict_set(&opts, "user_agent", c->user_agent, 0);
     av_dict_set(&opts, "cookies", c->cookies, 0);
     av_dict_set(&opts, "headers", c->headers, 0);
     av_dict_set(&opts, "http_proxy", c->http_proxy, 0);
@@ -1593,6 +1593,19 @@ static void update_noheader_flag(AVFormatContext *s)
         s->ctx_flags &= ~AVFMTCTX_NOHEADER;
 }
 
+static int hls_close(AVFormatContext *s)
+{
+    HLSContext *c = s->priv_data;
+
+    free_playlist_list(c);
+    free_variant_list(c);
+    free_rendition_list(c);
+
+    av_dict_free(&c->avio_opts);
+
+    return 0;
+}
+
 static int hls_read_header(AVFormatContext *s)
 {
     void *u = (s->flags & AVFMT_FLAG_CUSTOM_IO) ? NULL : s->pb;
@@ -1610,7 +1623,7 @@ static int hls_read_header(AVFormatContext *s)
 
     if (u) {
         // get the previous user agent & set back to null if string size is zero
-        update_options(&c->user_agent, "user-agent", u);
+        update_options(&c->user_agent, "user_agent", u);
 
         // get the previous cookies & set back to null if string size is zero
         update_options(&c->cookies, "cookies", u);
@@ -1748,6 +1761,7 @@ static int hls_read_header(AVFormatContext *s)
         }
         pls->ctx->pb       = &pls->pb;
         pls->ctx->io_open  = nested_io_open;
+        pls->ctx->flags   |= s->flags;
 
         if ((ret = ff_copy_whiteblacklists(pls->ctx, s)) < 0)
             goto fail;
@@ -1794,9 +1808,7 @@ static int hls_read_header(AVFormatContext *s)
 
     return 0;
 fail:
-    free_playlist_list(c);
-    free_variant_list(c);
-    free_rendition_list(c);
+    hls_close(s);
     return ret;
 }
 
@@ -2011,19 +2023,6 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
         return 0;
     }
     return AVERROR_EOF;
-}
-
-static int hls_close(AVFormatContext *s)
-{
-    HLSContext *c = s->priv_data;
-
-    free_playlist_list(c);
-    free_variant_list(c);
-    free_rendition_list(c);
-
-    av_dict_free(&c->avio_opts);
-
-    return 0;
 }
 
 static int hls_read_seek(AVFormatContext *s, int stream_index,
